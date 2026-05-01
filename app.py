@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 
-# Web sitesinin başlığı ve arayüz ayarları
 st.set_page_config(page_title="Global YouTube Fırsat Avcısı", page_icon="🎯", layout="wide")
 st.title("🎯 Global YouTube Fırsat Avcısı")
 st.write("Müzik kliplerinden arındırılmış, sadece hedeflediğiniz kategorilerdeki **'Düşük Rekabet / Yüksek Hacim'** fırsatlarını bulur.")
@@ -9,7 +8,6 @@ st.write("Müzik kliplerinden arındırılmış, sadece hedeflediğiniz kategori
 # API ANAHTARINIZI BURAYA YAPIŞTIRIN
 API_KEY = "AIzaSyCT5pvnI5IpLI4gffjLjL8pTQgodjuG_HY"
 
-# Hedef Ülkeler
 countries = {
     "Amerika Birleşik Devletleri": "US", 
     "Birleşik Krallık": "GB",
@@ -19,7 +17,6 @@ countries = {
     "İspanya": "ES"     
 }
 
-# YouTube Kategori ID'leri (Müzik hariç tutuldu, en verimli içerik kategorileri eklendi)
 categories = {
     "Eğlence (Entertainment)": "24",
     "Oyun (Gaming)": "20",
@@ -32,7 +29,6 @@ categories = {
     "Evcil Hayvanlar ve Hayvanlar (Pets & Animals)": "15"
 }
 
-# Arayüzü yan yana iki sütun yapmak için
 col1, col2 = st.columns(2)
 with col1:
     selected_country_name = st.selectbox("🌍 Hedef Ülke:", list(countries.keys()))
@@ -49,7 +45,7 @@ if st.button("🚀 Fırsatları Analiz Et"):
         'part': 'snippet,contentDetails,statistics',
         'chart': 'mostPopular',
         'regionCode': selected_country_code,
-        'videoCategoryId': selected_category_id, # Kategori filtresi tam olarak burada devreye giriyor!
+        'videoCategoryId': selected_category_id, 
         'maxResults': 50,
         'key': API_KEY
     }
@@ -60,15 +56,12 @@ if st.button("🚀 Fırsatları Analiz Et"):
         if vid_res.status_code == 200:
             video_data = vid_res.json().get('items', [])
             
-            # Seçilen kategoride o an yeterli trend yoksa kullanıcıyı uyar
             if not video_data:
                 st.warning("Bu kategoride şu an yeterli trend veri bulunamadı. Lütfen başka bir kategori veya ülke deneyin.")
             else:
-                # 1. Adım: Trend olan kanalların ID'lerini topla
                 channel_ids = [v['snippet']['channelId'] for v in video_data]
                 channel_ids_str = ",".join(list(set(channel_ids))) 
                 
-                # 2. Adım: Bu kanalların abone sayılarını bul
                 channel_url = f"https://www.googleapis.com/youtube/v3/channels"
                 channel_params = {
                     'part': 'statistics',
@@ -83,7 +76,6 @@ if st.button("🚀 Fırsatları Analiz Et"):
                     for c in chan_data:
                         sub_counts[c['id']] = int(c['statistics'].get('subscriberCount', 1)) 
                     
-                    # 3. Adım: Fırsat Puanı Hesaplama
                     analyzed_videos = []
                     for video in video_data:
                         title = video['snippet']['title']
@@ -114,7 +106,6 @@ if st.button("🚀 Fırsatları Analiz Et"):
                                 'link': f"https://www.youtube.com/watch?v={video_id}"
                             })
                     
-                    # Skorlara göre diz
                     analyzed_videos.sort(key=lambda x: x['score'], reverse=True)
                     
                     if analyzed_videos:
@@ -131,5 +122,7 @@ if st.button("🚀 Fırsatları Analiz Et"):
                         st.warning("Bu kategoride şu an için belirlediğimiz fırsat puanını aşan video bulunamadı. Daha niş kategorilere bakabilirsiniz.")
                 else:
                      st.error("Kanal verileri çekilirken hata oluştu.")
+                     st.code(chan_res.text)
         else:
-            st.error("Video verileri çekilirken hata oluştu.")
+            st.error(f"YouTube bir hata fırlattı! Hata Kodu: {vid_res.status_code}")
+            st.code(vid_res.text) # İşte YouTube'un gerçek itirafı burada yazacak
