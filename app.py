@@ -7,7 +7,7 @@ st.title("🌍 Global YouTube Trend Avcısı")
 st.write("Hedef ülkeyi seçin, trend olan videoları ve potansiyel fırsatları anında keşfedin.")
 
 # API ANAHTARINIZI BURAYA YAPIŞTIRIN
-API_KEY = "BURAYA_API_ANAHTARINIZI_YAPISTIRIN"
+API_KEY = "AIzaSyCT5pvnI5IpLI4gffjLjL8pTQgodjuG_HY"
 
 # Güncellenmiş Hedef Ülkeler Listesi
 countries = {
