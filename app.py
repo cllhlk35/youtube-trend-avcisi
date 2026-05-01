@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 # Arayüz ayarları
 st.set_page_config(page_title="Global YouTube Fırsat Avcısı", page_icon="🎯", layout="wide")
 st.title("🎯 Global YouTube Fırsat Avcısı (Pro)")
-st.write("Seçtiğiniz nişte **son 30 günün** en çok izlenen videolarını tarar. Aşağıdaki ayarları kullanarak kendi fırsat kriterlerinizi belirleyin.")
+st.write("Belirlediğiniz anahtar kelime ve kategoride **son 30 günün** gizli fırsatlarını (Düşük Rekabet / Yüksek Hacim) bulun.")
 
 # API ANAHTARINIZI AŞAĞIDAKİ TIRNAKLARIN İÇİNE YAPIŞTIRIN
 API_KEY = "AIzaSyCT5pvnI5IpLI4gffjLjL8pTQgodjuG_HY"
@@ -19,20 +19,20 @@ countries = {
     "İspanya": "ES"     
 }
 
+# "Tüm Kategoriler" seçeneği eklendi, böylece YouTube'un kısıtlamaları aşıldı!
 categories = {
-    "Eğlence (Entertainment)": "24",
-    "Oyun (Gaming)": "20",
-    "Eğitim (Education)": "27",
-    "Kişiler ve Bloglar (People & Blogs)": "22",
-    "Nasıl Yapılır ve Stil (Howto & Style)": "26",
-    "Bilim ve Teknoloji (Science & Technology)": "28",
-    "Komedi (Comedy)": "23",
-    "Spor (Sports)": "17",
-    "Evcil Hayvanlar ve Hayvanlar (Pets & Animals)": "15"
+    "Tüm Kategoriler (Önerilen)": "", 
+    "Eğitim": "27",
+    "Eğlence": "24",
+    "Oyun": "20",
+    "Kişiler ve Bloglar": "22",
+    "Nasıl Yapılır ve Stil": "26",
+    "Bilim ve Teknoloji": "28",
+    "Komedi": "23"
 }
 
-# 1. Satır: Ülke ve Kategori Seçimi
-col1, col2 = st.columns(2)
+# 1. Satır: Ülke, Kategori ve YENİ Anahtar Kelime Kutusu
+col1, col2, col3 = st.columns(3)
 with col1:
     selected_country_name = st.selectbox("🌍 Hedef Ülke:", list(countries.keys()))
     selected_country_code = countries[selected_country_name]
@@ -41,44 +41,57 @@ with col2:
     selected_category_name = st.selectbox("📂 İçerik Kategorisi:", list(categories.keys()))
     selected_category_id = categories[selected_category_name]
 
+with col3:
+    # YENİ ÖZELLİK: Anahtar Kelime Arama Kutusu
+    search_query = st.text_input("🔑 Anahtar Kelime:", placeholder="Örn: yapay zeka, vlog, podcast...")
+
 st.markdown("---")
 st.subheader("⚙️ Fırsat Filtreleri")
 
-# 2. Satır: Kullanıcı Kontrolündeki Slider'lar (Kaydırıcılar)
-col3, col4 = st.columns(2)
-with col3:
-    # Kullanıcı minimum izlenmeyi seçecek (Varsayılan: 10.000)
-    min_views = st.slider("Minimum İzlenme Sayısı:", min_value=1000, max_value=1000000, value=10000, step=5000)
+# 2. Satır: Kullanıcı Kontrolündeki Kaydırıcılar
+col4, col5 = st.columns(2)
 with col4:
-    # Kullanıcı minimum fırsat puanını seçecek (Varsayılan: 0.1)
+    min_views = st.slider("Minimum İzlenme Sayısı:", min_value=1000, max_value=500000, value=5000, step=1000)
+with col5:
     min_score = st.slider("Minimum Fırsat Puanı (İzlenme/Abone Oranı):", min_value=0.0, max_value=5.0, value=0.1, step=0.1)
 
 st.markdown("---")
 
 if st.button("🚀 Fırsatları Analiz Et"):
     
+    # Kullanıcı anahtar kelime yazmazsa küçük bir ipucu göster
+    if not search_query and selected_category_id != "":
+        st.info("💡 İpucu: YouTube bazı kategorilerde anahtar kelime yazılmadan sonuç vermeyebilir. Arama kutusuna bir kelime yazmayı veya 'Tüm Kategoriler' seçeneğini kullanmayı deneyin.")
+        
     thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat() + "Z"
     
     search_url = "https://www.googleapis.com/youtube/v3/search"
     search_params = {
         'part': 'snippet',
         'type': 'video',
-        'videoCategoryId': selected_category_id,
         'regionCode': selected_country_code,
         'order': 'viewCount', 
         'publishedAfter': thirty_days_ago, 
-        'maxResults': 50, # Veri havuzunu 50'ye çıkardık
+        'maxResults': 50, 
         'key': API_KEY
     }
     
-    with st.spinner(f"Son 30 günün {selected_category_name} verileri taranıyor..."):
+    # Kategori seçiliyse parametrelere ekle
+    if selected_category_id != "":
+        search_params['videoCategoryId'] = selected_category_id
+        
+    # Anahtar kelime yazılmışsa parametrelere ekle (YouTube'un kilit noktasını açan kod)
+    if search_query:
+        search_params['q'] = search_query
+    
+    with st.spinner("YouTube derinlikleri taranıyor..."):
         search_res = requests.get(search_url, params=search_params)
         
         if search_res.status_code == 200:
             search_data = search_res.json().get('items', [])
             
             if not search_data:
-                st.warning("Bu kategoride taze video bulunamadı.")
+                st.warning("Bu kriterlere uygun taze video bulunamadı. Lütfen anahtar kelimenizi değiştirin.")
             else:
                 video_ids = [item['id']['videoId'] for item in search_data]
                 video_ids_str = ",".join(video_ids)
@@ -121,7 +134,6 @@ if st.button("🚀 Fırsatları Analiz Et"):
                         
                         opportunity_score = views / subs
                         
-                        # İŞTE YENİ FİLTRE MANTIĞI: Kullanıcının belirlediği puan ve izlenmeyi geçiyorsa ekrana bas
                         if opportunity_score >= min_score and views >= min_views: 
                             video_format = "📱 Shorts (Dikey)" if ('H' not in duration and 'M' not in duration) else "📺 Uzun Video (Yatay)"
                                 
@@ -138,7 +150,7 @@ if st.button("🚀 Fırsatları Analiz Et"):
                     analyzed_videos.sort(key=lambda x: x['score'], reverse=True)
                     
                     if analyzed_videos:
-                        st.success(f"{len(analyzed_videos)} Adet Fırsat Bulundu! 🏆")
+                        st.success(f"Analiz Tamamlandı! {len(analyzed_videos)} Adet Altın Fırsat Bulundu 🏆")
                         for idx, v in enumerate(analyzed_videos): 
                             st.subheader(f"#{idx+1} {v['title']}")
                             st.write(f"**Format:** {v['format']} | **Kanal:** {v['channel']} ({v['subs']:,} Abone)")
@@ -146,7 +158,7 @@ if st.button("🚀 Fırsatları Analiz Et"):
                             st.markdown(f"[Videoyu ve Başlığı İncele]({v['link']})")
                             st.markdown("---")
                     else:
-                        st.warning("Seçtiğiniz filtreleri geçen video bulunamadı. Lütfen 'Minimum Fırsat Puanı' kaydırıcısını biraz daha sola çekerek (düşürerek) tekrar deneyin.")
+                        st.warning("Seçtiğiniz filtreleri geçen video bulunamadı. Lütfen 'Minimum Fırsat Puanı' kaydırıcısını biraz düşürerek tekrar deneyin.")
                 else:
                      st.error("Kanal detayları alınırken bir sorun oluştu.")
         else:
