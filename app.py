@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 # Arayüz ayarları
 st.set_page_config(page_title="Global YouTube Fırsat Avcısı", page_icon="🎯", layout="wide")
 st.title("🎯 Global YouTube Fırsat Avcısı (Pro)")
-st.write("Seçtiğiniz nişte (ör: Eğitim, Teknoloji) **son 30 günün en çok izlenen** videolarını tarar ve küçük kanalların yakaladığı büyük fırsatları listeler.")
+st.write("Seçtiğiniz nişte **son 30 günün** en çok izlenen videolarını tarar. Aşağıdaki ayarları kullanarak kendi fırsat kriterlerinizi belirleyin.")
 
 # API ANAHTARINIZI AŞAĞIDAKİ TIRNAKLARIN İÇİNE YAPIŞTIRIN
 API_KEY = "AIzaSyCT5pvnI5IpLI4gffjLjL8pTQgodjuG_HY"
@@ -31,6 +31,7 @@ categories = {
     "Evcil Hayvanlar ve Hayvanlar (Pets & Animals)": "15"
 }
 
+# 1. Satır: Ülke ve Kategori Seçimi
 col1, col2 = st.columns(2)
 with col1:
     selected_country_name = st.selectbox("🌍 Hedef Ülke:", list(countries.keys()))
@@ -40,38 +41,48 @@ with col2:
     selected_category_name = st.selectbox("📂 İçerik Kategorisi:", list(categories.keys()))
     selected_category_id = categories[selected_category_name]
 
+st.markdown("---")
+st.subheader("⚙️ Fırsat Filtreleri")
+
+# 2. Satır: Kullanıcı Kontrolündeki Slider'lar (Kaydırıcılar)
+col3, col4 = st.columns(2)
+with col3:
+    # Kullanıcı minimum izlenmeyi seçecek (Varsayılan: 10.000)
+    min_views = st.slider("Minimum İzlenme Sayısı:", min_value=1000, max_value=1000000, value=10000, step=5000)
+with col4:
+    # Kullanıcı minimum fırsat puanını seçecek (Varsayılan: 0.1)
+    min_score = st.slider("Minimum Fırsat Puanı (İzlenme/Abone Oranı):", min_value=0.0, max_value=5.0, value=0.1, step=0.1)
+
+st.markdown("---")
+
 if st.button("🚀 Fırsatları Analiz Et"):
     
-    # Son 30 günün tarihini YouTube'un anlayacağı formata çeviriyoruz
     thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat() + "Z"
     
-    # 1. ADIM: YouTube Arama Motorundan Son 30 Günün En İyilerini Bul
     search_url = "https://www.googleapis.com/youtube/v3/search"
     search_params = {
         'part': 'snippet',
         'type': 'video',
         'videoCategoryId': selected_category_id,
         'regionCode': selected_country_code,
-        'order': 'viewCount', # En çok izlenenleri en üste al
-        'publishedAfter': thirty_days_ago, # Sadece son 30 gün
-        'maxResults': 30, # Sistem hızlı çalışsın diye 30'da tutuyoruz
+        'order': 'viewCount', 
+        'publishedAfter': thirty_days_ago, 
+        'maxResults': 50, # Veri havuzunu 50'ye çıkardık
         'key': API_KEY
     }
     
-    with st.spinner(f"Son 30 günün {selected_category_name} verileri taranıyor... Bu işlem birkaç saniye sürebilir."):
+    with st.spinner(f"Son 30 günün {selected_category_name} verileri taranıyor..."):
         search_res = requests.get(search_url, params=search_params)
         
         if search_res.status_code == 200:
             search_data = search_res.json().get('items', [])
             
             if not search_data:
-                st.warning("Bu kriterlere uygun taze video bulunamadı.")
+                st.warning("Bu kategoride taze video bulunamadı.")
             else:
-                # Bulunan videoların ID'lerini al
                 video_ids = [item['id']['videoId'] for item in search_data]
                 video_ids_str = ",".join(video_ids)
                 
-                # 2. ADIM: Bu videoların detaylarını (İzlenme sayısı ve Süre) çek
                 video_url = f"https://www.googleapis.com/youtube/v3/videos"
                 video_params = {
                     'part': 'snippet,contentDetails,statistics',
@@ -81,7 +92,6 @@ if st.button("🚀 Fırsatları Analiz Et"):
                 vid_res = requests.get(video_url, params=video_params)
                 video_details = vid_res.json().get('items', []) if vid_res.status_code == 200 else []
                 
-                # 3. ADIM: Kanalların Abone Sayılarını Çek
                 channel_ids = [v['snippet']['channelId'] for v in video_details]
                 channel_ids_str = ",".join(list(set(channel_ids))) 
                 
@@ -97,7 +107,6 @@ if st.button("🚀 Fırsatları Analiz Et"):
                     chan_data = chan_res.json().get('items', [])
                     sub_counts = {c['id']: int(c['statistics'].get('subscriberCount', 1)) for c in chan_data}
                     
-                    # 4. ADIM: Fırsat Algoritması
                     analyzed_videos = []
                     for video in video_details:
                         title = video['snippet']['title']
@@ -112,8 +121,8 @@ if st.button("🚀 Fırsatları Analiz Et"):
                         
                         opportunity_score = views / subs
                         
-                        # Fırsat Puanı 0.5'ten büyük olanları (kendi çapına göre çok izlenenleri) filtrele
-                        if opportunity_score > 0.5: 
+                        # İŞTE YENİ FİLTRE MANTIĞI: Kullanıcının belirlediği puan ve izlenmeyi geçiyorsa ekrana bas
+                        if opportunity_score >= min_score and views >= min_views: 
                             video_format = "📱 Shorts (Dikey)" if ('H' not in duration and 'M' not in duration) else "📺 Uzun Video (Yatay)"
                                 
                             analyzed_videos.append({
@@ -126,22 +135,19 @@ if st.button("🚀 Fırsatları Analiz Et"):
                                 'link': f"https://www.youtube.com/watch?v={video_id}"
                             })
                     
-                    # Fırsat puanına göre en yüksekten en düşüğe sırala
                     analyzed_videos.sort(key=lambda x: x['score'], reverse=True)
                     
                     if analyzed_videos:
-                        st.success(f"{selected_category_name} İçin Fırsatlar Bulundu! 🏆")
-                        st.info("💡 **Nasıl Okunmalı?** Liste, son 30 günde yüklenip kendi abone sayısına oranla devasa izlenme alan (Fırsat) videoları gösterir.")
-                        for idx, v in enumerate(analyzed_videos[:15]): 
+                        st.success(f"{len(analyzed_videos)} Adet Fırsat Bulundu! 🏆")
+                        for idx, v in enumerate(analyzed_videos): 
                             st.subheader(f"#{idx+1} {v['title']}")
                             st.write(f"**Format:** {v['format']} | **Kanal:** {v['channel']} ({v['subs']:,} Abone)")
-                            st.write(f"**İzlenme:** {v['views']:,} | **🔥 Fırsat Puanı:** {v['score']:.1f}")
+                            st.write(f"**İzlenme:** {v['views']:,} | **🔥 Fırsat Puanı:** {v['score']:.2f}")
                             st.markdown(f"[Videoyu ve Başlığı İncele]({v['link']})")
                             st.markdown("---")
                     else:
-                        st.warning("Son 30 gün içinde bu kategoride düşük rekabetli (fırsat puanı yüksek) bir video bulunamadı.")
+                        st.warning("Seçtiğiniz filtreleri geçen video bulunamadı. Lütfen 'Minimum Fırsat Puanı' kaydırıcısını biraz daha sola çekerek (düşürerek) tekrar deneyin.")
                 else:
                      st.error("Kanal detayları alınırken bir sorun oluştu.")
         else:
             st.error("Arama verileri çekilirken YouTube bir hata fırlattı.")
-            st.code(search_res.text)
